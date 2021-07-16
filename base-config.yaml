@@ -1,3 +1,7 @@
+# command to use to trigger this bot
+# useful if you want to have multiple instances with different defaults or settings
+# in the same rooms as each other without getting duplicate posts
+trigger: reddit
 # default subreddit to fetch images from
 # don't include r/ or anything like that
 default_subreddit: photos
@@ -6,3 +10,5 @@ default_subreddit: photos
 #   reply: reply-message containing url to image
 #   upload: image upload to the room
 response_type: upload
+# allow nsfw content
+allow_nsfw: False

@@ -11,8 +11,10 @@ import datetime
 
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
+        helper.copy("trigger")
         helper.copy("default_subreddit")
         helper.copy("response_type")
+        helper.copy("allow_nsfw")
 
 class Post(Plugin):
     async def start(self) -> None:
@@ -41,14 +43,14 @@ class Post(Plugin):
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
 
-    @command.new(name="reddit", help="Post a random image from a subreddit")
+    @command.new(name=lambda self: self.config["trigger"], help="Post a random image or link from a subreddit")
     @command.argument("subreddit", pass_raw=True, required=False)
     async def handler(self, evt: MessageEvent, subreddit: str) -> None:
         await evt.mark_read()
 
         if subreddit.lower() == "help":
-            await evt.reply("fetch a random image or post from a subreddit.<br /> \
-                        for example say <code>!reddit photos</code> to post a random photo from r/photos.", allow_html=True)
+            await evt.reply(f"fetch a random image or post from a subreddit.<br /> \
+                        for example say <code>!{self.config['trigger']} photos</code> to post a random photo from r/photos.", allow_html=True)
             return None
 
         if not subreddit:
@@ -68,16 +70,18 @@ class Post(Plugin):
         # pick a random post until we find one that is not stickied
         stickied = True
         tries = 0
+        nsfw = False
         while stickied == True and tries <= 5:
             tries += 1
             try:
                 info = {}
                 picked_image = random.choice(data['data']['children'])
-                if picked_image['data']['stickied'] == 'true':
-                    await evt.respond("found one but it is stickied")
+                if picked_image['data']['stickied'] == 'true' or picked_image['data']['pinned'] == 'true':
                     continue
                 else:
                     stickied = False
+                if picked_image['data']['over_18'] == True:
+                    nsfw = True
                 image_link = picked_image['data']['url']
                 permalink = "https://reddit.com" + picked_image['data']['permalink']
                 mime = image_link.split(".")[-1].lower()
@@ -94,6 +98,8 @@ class Post(Plugin):
 
         if tries >= 5:
             await evt.respond("i tried several times, but failed. sorry.")
+        elif nsfw and (self.config['allow_nsfw'] != True):
+            await evt.respond("i found something, but it is marked NSFW.")
         else:
             if response_type == "message":
                 await evt.respond(permalink, allow_html=True)  # Respond to user
@@ -103,3 +109,4 @@ class Post(Plugin):
                 await self.post_image(evt.room_id, image_link, subreddit, info) # Upload the GIF to the room
             else:
                 await evt.respond("something is wrong with my config, be sure to set a response_type")
+
