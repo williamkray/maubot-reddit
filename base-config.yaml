@@ -1,0 +1,8 @@
+# default subreddit to fetch images from
+# don't include r/ or anything like that
+default_subreddit: photos
+# desired response type:
+#   message: regular message containing url to image
+#   reply: reply-message containing url to image
+#   upload: image upload to the room
+response_type: upload
