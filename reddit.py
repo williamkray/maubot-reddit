@@ -5,15 +5,22 @@ from mautrix.types import RoomID, ImageInfo
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
+from io import BytesIO
 
 import json
 import datetime
+
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 class Config(BaseProxyConfig):
     def do_update(self, helper: ConfigUpdateHelper) -> None:
         helper.copy("trigger")
         helper.copy("default_subreddit")
         helper.copy("response_type")
+        helper.copy("retries")
         helper.copy("allow_nsfw")
 
 class Post(Plugin):
@@ -29,14 +36,24 @@ class Post(Plugin):
         
         data = await resp.read()
         mime = info['mime'] 
-        filename = f"{subreddit}.{mime.split('/')[-1]}" if len(subreddit) > 0 else "reddit." + mime.split('/')[-1]
+        ext = info['ext']
+        filename = f"{subreddit}.{ext}" if len(subreddit) > 0 else "reddit." + ext
+        if Image is not None:
+            try:
+                image = Image.open(BytesIO(data))
+                width, height = image.size
+                info['width'] = width
+                info['height'] = height
+            except Exception as e:
+                await evt.respond(f"Something went wrong while getting dimensions: {e.message}")
+
         uri = await self.client.upload_media(data, mime_type=mime, filename=filename)
 
         await self.client.send_image(room_id, url=uri, file_name=filename,
                 info=ImageInfo(
-                        mimetype=info['mime']
-                        #width=info['width'],
-                        #height=info['height']
+                        mimetype=info['mime'],
+                        width=info['width'],
+                        height=info['height']
                     ))
 
     @classmethod
@@ -68,44 +85,60 @@ class Post(Plugin):
             data = await response.json()
 
         # pick a random post until we find one that is not stickied
-        stickied = True
         tries = 0
+        info = {}
         nsfw = False
-        while stickied == True and tries <= 5:
+        postable = False
+        while tries <= self.config['retries'] and postable == False:
             tries += 1
-            try:
-                info = {}
-                picked_image = random.choice(data['data']['children'])
-                if picked_image['data']['stickied'] == 'true' or picked_image['data']['pinned'] == 'true':
-                    continue
-                else:
-                    stickied = False
-                if picked_image['data']['over_18'] == True:
-                    nsfw = True
-                image_link = picked_image['data']['url']
-                permalink = "https://reddit.com" + picked_image['data']['permalink']
-                mime = image_link.split(".")[-1].lower()
-                ## if we can't find a media extension just default to permalink
-                if mime not in ["jpg", "jpeg", "png", "gif", "mp4", "mov"]:
-                    response_type = "message"
-                # pick some arbitrary dimensions so media manager doesn't freak out
-                #info['width'] = 480
-                #info['height'] = 270
-                info['mime'] = 'image/' + mime
-            except Exception as e:
-                await evt.respond(f"Something went wrong: {e.message}")
-                return None
+            #debug
+            #await evt.reply(f"DEBUG: try number {tries} of {self.config['retries']}, postable:{postable}" )
+            picked_image = random.choice(data['data']['children'])
+            if picked_image['data']['stickied'] == 'true' or picked_image['data']['pinned'] == 'true':
+                #debug
+                #await evt.reply(f"DEBUG: skipping because stickied")
+                continue
+            if picked_image['data']['over_18'] == True:
+                #debug
+                #await evt.reply(f"DEBUG: setting nsfw True")
+                nsfw = True
+            image_link = picked_image['data']['url']
+            permalink = "https://www.reddit.com" + picked_image['data']['permalink']
+            ext = image_link.split(".")[-1].lower()
+            ## if we can't find a media extension and we're supposed to upload, skip this one
+            if response_type == "upload" and ext in ["jpg", "jpeg", "png", "gif", "mp4", "mov"]:
+                #debug
+                #await evt.reply(f"DEBUG: setting postable, with ext:{ext}")
+                postable = True
+                info['mime'] = 'image/' + ext
+                info['ext'] = ext
+            elif response_type in ["respond", "reply"]:
+                #debug
+                #await evt.reply(f"DEBUG: setting postable because respond/reply type chosen")
+                postable = True
+            else:
+                #debug
+                #await evt.reply(f"DEBUG: skipping because response type is upload and cannot find ext:{ext} in list, \
+                #        postable is {postable}")
+                continue
+            #debug
+            #await evt.reply(f"DEBUG: info set to mime:{info['mime']} and ext:{info['ext']}")
 
-        if tries >= 5:
-            await evt.respond("i tried several times, but failed. sorry.")
+
+        if tries >= self.config['retries']:
+            await evt.respond(f"i tried to find something {self.config['retries']} times, but none of them met my criteria.")
         elif nsfw and (self.config['allow_nsfw'] != True):
             await evt.respond("i found something, but it is marked NSFW.")
+        elif postable == False:
+            await evt.respond("not sure how i got here, i haven't found a postable response yet")
         else:
             if response_type == "message":
                 await evt.respond(permalink, allow_html=True)  # Respond to user
             elif response_type == "reply":
                 await evt.reply(permalink, allow_html=True)  # Reply to user
             elif response_type == "upload":
+                #debug
+                #await evt.reply(f"trying to upload {print(info)}")
                 await self.post_image(evt.room_id, image_link, subreddit, info) # Upload the GIF to the room
             else:
                 await evt.respond("something is wrong with my config, be sure to set a response_type")

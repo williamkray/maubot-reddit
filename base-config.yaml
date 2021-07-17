@@ -10,5 +10,7 @@ default_subreddit: photos
 #   reply: reply-message containing url to image
 #   upload: image upload to the room
 response_type: upload
+# number of times to retry if posts contain non-matching data
+retries: 10
 # allow nsfw content
 allow_nsfw: False
