@@ -1,26 +1,16 @@
-this is a simple [maubot](https://github.com/maubot/maubot) plugin which interacts with a [matrix-registration](https://github.com/zeratax/matrix-registration) deployment and generates invite tokens.
+this is a simple plugin for maubot that fetches a random link or image from a subreddit, and posts it to matrix for you.
 
-modify the config to point to your matrix-registration url, include your admin secret to authenticate, and ensure that you're in the list of approved users.
+install it like any other maubot plugin, and swing on over to the config file. there you can set a few options like:
 
-*please note* that matrix-registration versions BELOW 0.9.0 have different API endpoints, expected date structures, json
-arguments, etc. and require the `legacy_mr` value in your config to be set to `True`! If your matrix-registration
-instance is 0.9.0 or greater, leave this as `false`.
+  - default subreddit to use if no subreddit is supplied in the argument
+  - the trigger word to use (default is reddit)
+  - whether to allow NSFW content
 
-once your bot is running, simply use the command
+to use it, run your bot and use your trigger. so using default configs, it would look like this:
 
-    !invite generate
+`!reddit funny`
 
-to generate a token with some generic text you can copy-paste when sharing it with your invitee!
+to fetch a random post from the r/funny subreddit.
 
-to check the status of a specific token, use
-
-    !invite status MyTokenName
-
-and similarly to list all tokens in the database, use
-
-    !invite list
-
-to revoke a token, use
-
-    !invite revoke MyTokenName
-
+use a different trigger and default subreddit config for multiple instances to have shortcuts to subreddits you frequent
+without getting duplicate responses in the same room!
