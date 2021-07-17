@@ -112,7 +112,7 @@ class Post(Plugin):
                 postable = True
                 info['mime'] = 'image/' + ext
                 info['ext'] = ext
-            elif response_type in ["respond", "reply"]:
+            elif response_type in ["message", "reply"]:
                 #debug
                 #await evt.reply(f"DEBUG: setting postable because respond/reply type chosen")
                 postable = True
