@@ -60,14 +60,18 @@ class Post(Plugin):
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
 
-    @command.new(name=lambda self: self.config["trigger"], help="Post a random image or link from a subreddit")
+    @command.new(name=lambda self: self.config["trigger"], help=f"Fetch a random post from a subreddit")
     @command.argument("subreddit", pass_raw=True, required=False)
     async def handler(self, evt: MessageEvent, subreddit: str) -> None:
         await evt.mark_read()
 
+        mtype = "picture"
+        if self.config['response_type'] in ["message", "reply"]:
+            mtype = "link"
+
         if subreddit.lower() == "help":
-            await evt.reply(f"fetch a random image or post from a subreddit.<br /> \
-                        for example say <code>!{self.config['trigger']} photos</code> to post a random photo from r/photos.", allow_html=True)
+            await evt.reply(f"fetch a random {mtype} from a subreddit.<br /> \
+                        for example say <code>!{self.config['trigger']} photos</code> to post a random {mtype} from r/photos.", allow_html=True)
             return None
 
         if not subreddit:
@@ -126,7 +130,11 @@ class Post(Plugin):
 
 
         if tries >= self.config['retries']:
-            await evt.respond(f"i tried to find something {self.config['retries']} times, but none of them met my criteria.")
+            message = [f"i tried to find something {self.config['retries']} times, but none of them met my criteria."]
+            if response_type == "upload":
+                message.append("it's probably because i'm set to upload images, but i wasn't able to find any.<br /> \
+                        change my settings to allow links, and i'll be less particular.")
+            await evt.respond("<br />".join(message), allow_html=True)
         elif nsfw and (self.config['allow_nsfw'] != True):
             await evt.respond("i found something, but it is marked NSFW.")
         elif postable == False:
