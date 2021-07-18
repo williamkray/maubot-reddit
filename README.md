@@ -16,6 +16,11 @@ to fetch a random post from the r/funny subreddit.
 use a different trigger and default subreddit config for multiple instances to have shortcuts to subreddits you frequent
 without getting duplicate responses in the same room!
 
-if you choose to upload images directly with the bot, it will still fall back to using the reddit permalink to the post
-if it can't recognize the link as a media file (so it does this for external links, reddit albums, etc that don't end
-specifically in .png or .jpg etc)
+if you choose to upload images directly with the bot, it will fail to recognize media links that don't end in a common
+media file extension (png, gif, jpg, etc). this means that on subreddits with primarily text-based posts, or posts that
+are links out to third-party sites like gfycat which don't include file extensions, the bot will try and most likely
+fail to find something to upload. use the message or reply response type for these kinds of subreddits!
+
+pro-tip: run multiple instances of the plugin with different trigger-words and configurations under the same bot client
+to cover all the bases! for example, one version that uses the "upload" response type with trigger word `redditimg` and
+one version that uses the "message" response type with trigger word `redditlink`.
