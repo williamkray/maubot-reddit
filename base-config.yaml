@@ -4,7 +4,8 @@
 trigger: reddit
 # default subreddit to fetch images from
 # don't include r/ or anything like that
-default_subreddit: photos
+# leaving it an empty string will use the front page
+default_subreddit: ""
 # desired response type:
 #   message: regular message containing url to image
 #   reply: reply-message containing url to image

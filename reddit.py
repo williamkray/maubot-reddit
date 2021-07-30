@@ -78,13 +78,17 @@ class Post(Plugin):
             # If user doesn't supply a subreddit, use the default
             subreddit = self.config["default_subreddit"]
 
+        if len(subreddit) >= 1:
+            if not subreddit.startswith('r/'):
+                subreddit = 'r/' + subreddit
+
         response_type = self.config["response_type"]
         headers = {
                 'User-Agent': 'Maubot-RedditImg-Plugin'
                 }
         # Get random image url
         async with self.http.get(
-            "https://api.reddit.com/r/{}".format(subreddit), headers=headers
+            "https://api.reddit.com/{}".format(subreddit), headers=headers
         ) as response:
             status = response.status
             data = await response.json()
