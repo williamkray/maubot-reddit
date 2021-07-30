@@ -86,7 +86,12 @@ class Post(Plugin):
         async with self.http.get(
             "https://api.reddit.com/r/{}".format(subreddit), headers=headers
         ) as response:
+            status = response.status
             data = await response.json()
+
+        if status != 200:
+            await evt.reply("i got a bad response, are you sure that's an actual subreddit?")
+            return None
 
         # pick a random post until we find one that is not stickied
         tries = 0
