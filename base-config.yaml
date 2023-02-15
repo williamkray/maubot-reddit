@@ -11,6 +11,10 @@ default_subreddit: ""
 #   reply: reply-message containing url to image
 #   upload: image upload to the room
 response_type: upload
+# if using upload as default response type, should we fall back to sending a link to
+# the post if nothing is identified as an uploadable file?
+# options are: none message reply
+fallback: reply
 # number of times to retry if posts contain non-matching data
 retries: 10
 # allow nsfw content
