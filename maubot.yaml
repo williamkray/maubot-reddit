@@ -1,6 +1,6 @@
 maubot: 0.1.0
 id: org.jobmachine.reddit
-version: 0.3.9
+version: 0.4.0
 license: MIT
 modules:
 - reddit

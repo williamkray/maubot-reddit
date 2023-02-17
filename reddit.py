@@ -47,7 +47,7 @@ class Post(Plugin):
             return data
 
 
-    async def fetch_and_upload_image(self, info: dict) -> ContentURI:
+    async def fetch_and_upload_image(self, info: dict, subreddit_name: str) -> ContentURI:
         resp = await self.http.get(info['permalink')
         if resp.status != 200:
             raise ValueError("Response from reddit was not successful, file could not be downloaded.")
@@ -64,7 +64,7 @@ class Post(Plugin):
                 await evt.respond(f"Something went wrong while getting dimensions: {e.message}")
 
         uri = await self.client.upload_media(filedata, mime_type=info['mime'],
-                                             filename=info['filename'])
+                                             filename=subreddit_name + info['ext'])
 
         return uri
 
@@ -178,9 +178,12 @@ class Post(Plugin):
         elif response_type == "reply":
             await evt.reply(content=post['permalink'], allow_html=True)  # Reply to user
         elif response_type == "upload":
+            if not post['msgtype'] == "image":
+                await evt.respond("i can't upload the response because it's not an image.")
+                return None
             try:
                 # try to download and upload the image
-                mxc_url = await self.fetch_and_upload_image(post)
+                mxc_url = await self.fetch_and_upload_image(post, subreddit)
                 content["url"] = mxc_url
                 await evt.respond(content=content)
             except Exception as e:
