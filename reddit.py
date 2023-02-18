@@ -1,7 +1,7 @@
 from typing import Optional, Type
 import urllib.parse
 import random
-from mautrix.types import RoomID, ImageInfo, BaseMessageEventContent, ContentURI
+from mautrix.types import RoomID, ImageInfo, TextMessageEventContent, ContentURI
 from mautrix.util.config import BaseProxyConfig, ConfigUpdateHelper
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
@@ -24,7 +24,7 @@ class Config(BaseProxyConfig):
         helper.copy("retries")
         helper.copy("allow_nsfw")
 
-class Post(Plugin):
+class RedditPost(Plugin):
     async def start(self) -> None:
         await super().start()
         self.config.load_and_update()
@@ -34,11 +34,9 @@ class Post(Plugin):
                 'User-Agent': 'Maubot-RedditImg-Plugin'
                 }
         # Get random image url
-        with self.http.get(
-            "https://api.reddit.com/{}".format(subreddit), headers=headers
-        ) as response:
-            status = response.status
-            data = await response.json()
+        response = await self.http.get("https://api.reddit.com/{}".format(subreddit), headers=headers)
+        status = response.status
+        data = await response.json()
 
         if status != 200:
             #await evt.reply("i got a bad response, are you sure that's an actual subreddit?")
@@ -47,28 +45,37 @@ class Post(Plugin):
             return data
 
 
-    async def fetch_and_upload_image(self, info: dict, subreddit_name: str) -> ContentURI:
-        resp = await self.http.get(info['permalink')
+    async def fetch_and_upload_image(self, info: dict, subreddit_name: str) -> dict:
+        self.log.debug(f"DEBUG: attempting download of {info['image_link']}")
+        media_info = {}
+        resp = await self.http.get(info['image_link'])
         if resp.status != 200:
             raise ValueError("Response from reddit was not successful, file could not be downloaded.")
             return None
         
         filedata = await resp.read()
         if Image is not None:
+            self.log.debug(f"DEBUG: using Image library to fetch image dimensions")
             try:
                 image = Image.open(BytesIO(filedata))
                 width, height = image.size
-                info['width'] = width
-                info['height'] = height
+                # hopefully media_info is created before we call this
+                media_info['width'] = width
+                media_info['height'] = height
+                media_info['mimetype'] = info['mime']
+                self.log.debug(f"DEBUG: image is {media_info['width']} by {media_info['height']}")
             except Exception as e:
-                await evt.respond(f"Something went wrong while getting dimensions: {e.message}")
+                self.log.warning(f"Something went wrong while getting dimensions: {e}")
 
-        uri = await self.client.upload_media(filedata, mime_type=info['mime'],
+        self.log.debug(f"DEBUG: attempting upload of image to matrix")
+        mxc_uri = await self.client.upload_media(filedata, mime_type=info['mime'],
                                              filename=subreddit_name + info['ext'])
+        media_info['url'] = mxc_uri
 
-        return uri
+        self.log.debug(f"DEBUG: uploaded image has mxc uri {media_info['url']}")
+        return media_info
 
-    async def pick_a_post(self, data) -> dict:
+    async def pick_a_post(self, data, response_type: str) -> dict:
         # pick a random post until we find one that is not stickied
         tries = 0
         info = {}
@@ -76,41 +83,52 @@ class Post(Plugin):
         postable = False
         while tries <= self.config['retries'] and postable == False:
             tries += 1
+            self.log.debug(f"DEBUG: number of tries = {tries}")
             picked_image = random.choice(data['data']['children'])
+            permalink = "https://www.reddit.com" + picked_image['data']['permalink']
+            image_link = picked_image['data']['url']
+            ext = image_link.split(".")[-1].lower()
             if picked_image['data']['stickied'] == 'true' or picked_image['data']['pinned'] == 'true':
                 #debug
-                #await evt.reply(f"DEBUG: skipping because stickied")
+                self.log.debug(f"DEBUG: skipping {permalink} because stickied")
                 continue
             if picked_image['data']['over_18'] == True:
                 #debug
-                #await evt.reply(f"DEBUG: setting nsfw True")
+                self.log.debug(f"DEBUG: setting nsfw True")
                 nsfw = True
-            image_link = picked_image['data']['url']
-            permalink = "https://www.reddit.com" + picked_image['data']['permalink']
-            ext = image_link.split(".")[-1].lower()
             ## if we can't find a media extension and we're supposed to upload, skip this one
             if response_type == "upload" and ext in ["jpg", "jpeg", "png", "gif", "webp"]:
                 #debug
-                #await evt.reply(f"DEBUG: setting postable, with ext:{ext}")
-                postable = True
+                self.log.debug(f"DEBUG: choosing {permalink} because extension is {ext}")
+                self.log.debug(f"DEBUG: setting msgtype to image now...")
                 msgtype = 'image'
                 info['msgtype'] = msgtype
-                info['mime'] = [msgtype, ext].join('/')
+                self.log.debug(f"DEBUG: post info is {info}")
+                info['mime'] = '/'.join([msgtype, ext])
+                self.log.debug(f"DEBUG: post info is {info}")
                 info['ext'] = ext
+                self.log.debug(f"DEBUG: post info is {info}")
+                info['permalink'] = permalink
+                self.log.debug(f"DEBUG: post info is {info}")
+                info['image_link'] = image_link
+                self.log.debug(f"DEBUG: post info is {info}")
+                self.log.debug(f"DEBUG: setting postable to True, this should stop the loop")
+                postable = True
             elif response_type in ["message", "reply"]:
                 #debug
-                #await evt.reply(f"DEBUG: setting postable because respond/reply type chosen")
+                self.log.debug(f"DEBUG: choosing {permalink} because response_type is {response_type}")
                 info['permalink'] = permalink
+                info['msgtype'] = 'image'
+                self.log.debug(f"DEBUG: setting postable to True, this should stop the loop")
                 postable = True
             else:
                 #debug
-                #await evt.reply(f"DEBUG: skipping because response type is upload and cannot find ext:{ext} in list, \
-                #        postable is {postable}")
+                self.log.debug(f"DEBUG: skipping {picked_image['data']['permalink']} because response type is upload and cannot find ext:{ext} in list, postable is {postable}")
+                self.log.debug(f"DEBUG: postable remains False, the loop continues")
                 continue
-            #debug
-            #await evt.reply(f"DEBUG: info set to mime:{info['mime']} and ext:{info['ext']}")
 
         if tries >= self.config['retries']:
+            self.log.debug(f"DEBUG: number of tries has reached {tries}")
             raise IndexError("No postable options in list.")
         elif nsfw and (self.config['allow_nsfw'] != True):
             raise AttributeError("Non-allowed content found.")
@@ -126,10 +144,10 @@ class Post(Plugin):
     @command.new(name=lambda self: self.config["trigger"], help=f"Fetch a random post from a subreddit")
     @command.argument("subreddit", pass_raw=True, required=False)
     async def handler(self, evt: MessageEvent, subreddit: str) -> None:
-        await evt.mark_read()
+        response_type = self.config["response_type"]
 
         mtype = "picture"
-        if self.config['response_type'] in ["message", "reply"]:
+        if response_type in ["message", "reply"]:
             mtype = "link"
 
         if subreddit.lower() == "help":
@@ -145,31 +163,35 @@ class Post(Plugin):
             if not subreddit.startswith('r/'):
                 subreddit = 'r/' + subreddit
 
-        response_type = self.config["response_type"]
-
         # get json response from reddit api
         data = await self.fetch_from_reddit(subreddit)
 
+        self.log.debug(f"Response type is: {response_type}")
         # pass api response to picking logic
         try:
-            post = await self.pick_a_post(data)
-        except AttributeError as e:
+            post = await self.pick_a_post(data, response_type)
+            self.log.debug(f"Post has been picked: {post['permalink']}")
+        except Exception as exception1:
             if self.config['fallback'] != 'none':
                 response_type = self.config['fallback']
                 # try again with our fallback option
                 try:
-                    post = await self.pick_a_post(data)
-                except Exception as e:
-                    await evt.respond(f"Something went wrong: {e}")
+                    post = await self.pick_a_post(data, response_type)
+                    # overwrite msgtype in the dict
+                    post['msgtype'] = 'text'
+                    self.log.debug(f"Post has been picked: {post['permalink']}")
+                except Exception as exception2:
+                    await evt.respond(f"Something went wrong: {exception2}")
                     return None
-        except Exception as e:
-            await evt.respond(f"Something went wrong: {e}")
-            return None
+
+            else:
+                await evt.reply(f"Sorry, I couldn't find anything to post")
+                return None
 
         # now we send a message with the post contents
-        content = BaseMessageEventContent(
+        content = TextMessageEventContent(
                     msgtype=f"m.{post['msgtype']}",
-                    body=subreddit+post['ext'],
+                    body=subreddit,
                     external_url=post['permalink']
                 )
 
@@ -178,13 +200,20 @@ class Post(Plugin):
         elif response_type == "reply":
             await evt.reply(content=post['permalink'], allow_html=True)  # Reply to user
         elif response_type == "upload":
-            if not post['msgtype'] == "image":
+            if not post['msgtype'] == "image" or not post:
                 await evt.respond("i can't upload the response because it's not an image.")
                 return None
             try:
                 # try to download and upload the image
-                mxc_url = await self.fetch_and_upload_image(post, subreddit)
-                content["url"] = mxc_url
+                media_info = await self.fetch_and_upload_image(post, subreddit)
+                content["url"] = media_info['url']
+                # overwrite the body to include file extension
+                content['body'] = '.'.join([subreddit, post['ext']])
+                content['info'] = {}
+                content['info']['mimetype'] = media_info['mimetype']
+                content['info']['h'] = media_info['height']
+                content['info']['w'] = media_info['width']
+
                 await evt.respond(content=content)
             except Exception as e:
                 await evt.respond(f"something went wrong: {e}")
