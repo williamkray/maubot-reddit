@@ -6,6 +6,7 @@ install it like any other maubot plugin, and swing on over to the config file. t
   - the trigger word to use (default is reddit)
   - whether to allow NSFW content
   - how to submit the message (reply, respond, or just upload an image if available)
+  - what to fall back to if you are using "upload" as your default behavior
 
 to use it, run your bot and use your trigger. so using default configs, it would look like this:
 
@@ -19,8 +20,6 @@ without getting duplicate responses in the same room!
 if you choose to upload images directly with the bot, it will fail to recognize media links that don't end in a common
 media file extension (png, gif, jpg, etc). this means that on subreddits with primarily text-based posts, or posts that
 are links out to third-party sites like gfycat which don't include file extensions, the bot will try and most likely
-fail to find something to upload. use the message or reply response type for these kinds of subreddits!
+fail to find something to upload. use the message or reply response type for these kinds of subreddits, or set your
+fallback settings to do so automagically.
 
-pro-tip: run multiple instances of the plugin with different trigger-words and configurations under the same bot client
-to cover all the bases! for example, one version that uses the "upload" response type with trigger word `redditimg` and
-one version that uses the "message" response type with trigger word `redditlink`.
